@@ -2,6 +2,7 @@ package painting;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Paint;
 import java.awt.Point;
 import java.awt.Shape;
 import java.awt.event.ActionEvent;
@@ -13,6 +14,7 @@ import java.awt.event.KeyListener;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.awt.event.MouseMotionListener;
+import java.awt.geom.Rectangle2D;
 import java.awt.geom.RoundRectangle2D;
 import java.io.File;
 import java.io.FileWriter;
@@ -58,7 +60,6 @@ public class CreativeCanvas extends JFrame implements ActionListener, ItemListen
 	private JTextField[] mouseStates;
 	private double x = 0.0;
 	private double y = 0.0;
-	private Boolean clipboard = false;
 	private Stack<Shape> redoStack = new Stack<Shape>();
 	private String FileName = null;
 	private Curve tempCurve;
@@ -66,9 +67,10 @@ public class CreativeCanvas extends JFrame implements ActionListener, ItemListen
 	private int[] xints = new int[100];
 	private int[] yints = new int[100];
 	private int polyCount = 0;
-	private RoundRectangle2D.Double selectRectangle;
+	private Rectangle selectRectangle2;
 	private Popup infoP;
 	private JButton closeB;
+	private String command2 = "Copy";
 
 	public CreativeCanvas() {
 		super("Drawing");
@@ -145,8 +147,8 @@ public class CreativeCanvas extends JFrame implements ActionListener, ItemListen
 		JMenu editMenu = new JMenu("Edit");
 		editMenu.setMnemonic(KeyEvent.VK_E); // mnemonics use ALT_MASK
 
-		String[] commands2 = { "Select", "Cut", "Copy", "Paste", "Undo", "Redo" };
-		int[] editKeyEvents = { KeyEvent.VK_S, KeyEvent.VK_X, KeyEvent.VK_C, KeyEvent.VK_V, KeyEvent.VK_Z,
+		String[] commands2 = {"Cut", "Copy", "Paste", "Undo", "Redo" };
+		int[] editKeyEvents = {KeyEvent.VK_X, KeyEvent.VK_C, KeyEvent.VK_V, KeyEvent.VK_Z,
 				KeyEvent.VK_R };
 		for (int i = 0; i < commands2.length; i++) {
 			menuItem = new JMenuItem(commands2[i]);
@@ -250,13 +252,8 @@ public class CreativeCanvas extends JFrame implements ActionListener, ItemListen
 				RoundRectangle selectRectangle = new RoundRectangle(Math.min(x, e.getX()), Math.min(y, e.getY()),
 						Math.max(x, e.getX()), Math.max(y, e.getY()), 50, 50, color, fill);
 				canvas.setSelectRectangle(selectRectangle);
-				Rectangle selectRectangle2 = new Rectangle(Math.min(x, e.getX()), Math.min(y, e.getY()),
+				 selectRectangle2 = new Rectangle(Math.min(x, e.getX()), Math.min(y, e.getY()),
 						Math.max(x, e.getX()), Math.max(y, e.getY()), color, fill);
-				for (Shape s : shapes) {
-					if (s.intersects(selectRectangle2)) {
-						selectedShapes.add(s);
-					}
-				}
 				break;
 			}
 			repaint();
@@ -324,17 +321,45 @@ public class CreativeCanvas extends JFrame implements ActionListener, ItemListen
 		public void keyPressed(KeyEvent e) {
 			int key = e.getKeyCode();
 			if (key == KeyEvent.VK_ENTER) {
-				Polygon2 poly = new Polygon2(xints, yints, polyCount, color, fill);
-				shapes.add(poly);
-				repaint();
-				try {
-					Arrays.fill(xints, (Integer) null);
-					Arrays.fill(yints, (Integer) null);
-				} catch (Exception unused) {
-					; // Ignore exception because we can't do anything. Will use default.
+				if (xints.length > 0) {
+					Polygon2 poly = new Polygon2(xints, yints, polyCount, color, fill);
+					shapes.add(poly);
+					repaint();
+					try {
+						Arrays.fill(xints, (Integer) null);
+						Arrays.fill(yints, (Integer) null);
+					} catch (Exception unused) {
+						; // Ignore exception because we can't do anything. Will use default.
+					}
+					polyCount = 0;
 				}
-				polyCount = 0;
-			}
+				if (shapeType == "Select Rectangle") {
+				
+					if (command2 == "Copy") {
+						for (Shape s : shapes) {
+							Rectangle2D rec = s.getBounds2D();
+							if (selectRectangle2.contains(rec)) {
+								selectedShapes.add(s);
+							}
+						}
+						repaint();
+					}
+					if (command2 == "Cut") {
+						for (Shape s : shapes) {
+							Rectangle2D rec = s.getBounds2D();
+							if (selectRectangle2.contains(rec)) {
+								selectedShapes.add(s);
+							}
+						}
+						for (Shape s : selectedShapes) {
+							shapes.remove(s);
+						}
+						repaint();
+					}
+					canvas.removeSelectRectangle();
+					repaint();
+				}
+			}	
 		}
 
 		@Override
@@ -402,28 +427,17 @@ public class CreativeCanvas extends JFrame implements ActionListener, ItemListen
 			shapeType = "Select Rectangle";
 			break;
 		case "Cut":
-			if (selectedShapes.size() > 0) {
-				for (Shape s : selectedShapes) {
-					shapes.remove(s);
-				}
-			}
-			clipboard = true;
-			canvas.removeSelectRectangle();
-			repaint();
+			shapeType = "Select Rectangle";
+			command2 = "Cut";
 			break;
 		case "Copy":
-			clipboard = true;
-			canvas.removeSelectRectangle();
-			repaint();
+			shapeType = "Select Rectangle";
+			command2 = "Copy";
 			break;
 		case "Paste":
-			if (selectedShapes.size() > 0) {
-				for (Shape s : selectedShapes) {
-					shapes.add(s);
-				}
+			for (Shape s : selectedShapes) {
+				shapes.add(s);
 			}
-			clipboard = false;
-			canvas.removeSelectRectangle();
 			repaint();
 			break;
 		case "Undo":
@@ -520,9 +534,8 @@ public class CreativeCanvas extends JFrame implements ActionListener, ItemListen
 						+ "shape in the draw menu changes the type of shape you are drawing.<br>-Draw lines, ellipses, and "
 						+ "rectangles by dragging and releasing the mouse.<br>-Draw curves by freeform dragging across "
 						+ "the canvas.<br>-Draw polygons by clicking the points that you want to connect and then pressing "
-						+ "enter when you're done.<br>-To select shapes to cut or copy, choose select in the edit menu "
-						+ "and drag to select shapes.<br>-Once you have selected shapes you can cut or copy them using the "
-						+ "commands in the edit menu.<br>-Paste repaints the last shape(s) that was cut or copied in the same "
+						+ "enter when you're done.<br>-To cut or copy, choose the option in the edit menu and drag to select "
+						+ "shapes and press enter to complete the action.<br>-Paste repaints the last shape(s) that was cut or copied in the same "
 						+ "location that it was in.<br>-Undo removes the last shape drawn, redo repaints the last shape "
 						+ "that was undone.<br>-The hot keys to open up the menu are Alt-F for File, Alt-D for Draw, "
 						+ "Alt-E for Edit, and Alt-H for Help.<br>-Some hotkeys for specific actions only work if the "
